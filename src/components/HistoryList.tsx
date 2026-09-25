@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Download, Trash2, Clock, Volume2, History as HistoryIcon, HardDrive, Pencil, Check } from 'lucide-react';
+import { Play, Download, Trash2, Clock, Volume2, History as HistoryIcon, HardDrive, Pencil, Check, Film } from 'lucide-react';
 import { GeneratedAudio } from '../types';
 import { formatTime, formatBytes, downloadAudio, formatFilename } from '../utils/audio';
 
@@ -9,6 +9,7 @@ interface HistoryListProps {
   onDeleteAudio: (id: string) => void;
   onClearHistory: () => void;
   onUpdateTitle?: (id: string, newTitle: string) => void;
+  onSendToVideoEditor?: (audio: GeneratedAudio) => void;
   currentAudioId?: string;
 }
 
@@ -18,6 +19,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   onDeleteAudio,
   onClearHistory,
   onUpdateTitle,
+  onSendToVideoEditor,
   currentAudioId,
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -173,6 +175,19 @@ export const HistoryList: React.FC<HistoryListProps> = ({
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 shrink-0">
+                {/* Send to VideoVozLivre */}
+                {onSendToVideoEditor && (
+                  <button
+                    type="button"
+                    onClick={() => onSendToVideoEditor(item)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-violet-950/80 hover:bg-violet-900 border border-violet-700/80 rounded-lg transition-colors cursor-pointer"
+                    title="Puxar para o editor VideoVozLivre"
+                  >
+                    <Film className="h-3.5 w-3.5 text-violet-300" />
+                    <span>Criar Vídeo</span>
+                  </button>
+                )}
+
                 {/* Play in main player */}
                 <button
                   type="button"

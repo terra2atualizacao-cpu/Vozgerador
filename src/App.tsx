@@ -7,6 +7,7 @@ import { VoiceSettings } from './components/VoiceSettings';
 import { AudioPlayer } from './components/AudioPlayer';
 import { HistoryList } from './components/HistoryList';
 import { AboutSection } from './components/AboutSection';
+import { VideoVozLivre } from './components/VideoVozLivre';
 import { Voice, GeneratedAudio, GenerationProgress, ProsodySettings } from './types';
 import { estimateDurationSeconds } from './utils/audio';
 import { CURATED_VOICES } from './constants/voices';
@@ -21,7 +22,7 @@ import {
 const STORAGE_KEY_VOICE = 'vozlivre_selected_voice_v1';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'converter' | 'voices' | 'history' | 'about'>('converter');
+  const [activeTab, setActiveTab] = useState<'converter' | 'videovozlivre' | 'voices' | 'history' | 'about'>('converter');
   const [voices, setVoices] = useState<Voice[]>(CURATED_VOICES);
   const [selectedVoice, setSelectedVoice] = useState<Voice | null>(() => {
     try {
@@ -51,6 +52,7 @@ export default function App() {
   });
 
   const [currentAudio, setCurrentAudio] = useState<GeneratedAudio | null>(null);
+  const [videoEditorAudio, setVideoEditorAudio] = useState<GeneratedAudio | null>(null);
   const [history, setHistory] = useState<GeneratedAudio[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [eventSourceRef, setEventSourceRef] = useState<EventSource | null>(null);
@@ -119,6 +121,12 @@ export default function App() {
       localStorage.setItem(STORAGE_KEY_VOICE, voice.id);
     } catch {}
     setIsVoicePickerOpen(false);
+  };
+
+  const handleSendToVideoEditor = (audio: GeneratedAudio) => {
+    setVideoEditorAudio(audio);
+    setActiveTab('videovozlivre');
+    setError(null);
   };
 
   const handleUpdateAudioTitle = async (id: string, newTitle: string) => {
@@ -503,13 +511,24 @@ export default function App() {
                 <AudioPlayer
                   audio={currentAudio}
                   onUpdateTitle={handleUpdateAudioTitle}
+                  onSendToVideoEditor={handleSendToVideoEditor}
                 />
               </div>
             )}
           </div>
         )}
 
-        {/* View 2: Full Voice Catalog */}
+        {/* View 2: VideoVozLivre Editor */}
+        {activeTab === 'videovozlivre' && (
+          <VideoVozLivre
+            currentAudio={videoEditorAudio || currentAudio || history[0] || null}
+            history={history}
+            onSelectAudio={(audio) => setVideoEditorAudio(audio)}
+            onNavigateToConverter={() => setActiveTab('converter')}
+          />
+        )}
+
+        {/* View 3: Full Voice Catalog */}
         {activeTab === 'voices' && (
           <div className="space-y-6">
             <div className="border-b border-neutral-900 pb-4">
@@ -532,7 +551,7 @@ export default function App() {
           </div>
         )}
 
-        {/* View 3: History */}
+        {/* View 4: History */}
         {activeTab === 'history' && (
           <div className="space-y-6">
             <HistoryList
@@ -545,11 +564,12 @@ export default function App() {
               onDeleteAudio={handleDeleteAudio}
               onClearHistory={handleClearHistory}
               onUpdateTitle={handleUpdateAudioTitle}
+              onSendToVideoEditor={handleSendToVideoEditor}
             />
           </div>
         )}
 
-        {/* View 4: How It Works */}
+        {/* View 5: How It Works */}
         {activeTab === 'about' && (
           <AboutSection />
         )}

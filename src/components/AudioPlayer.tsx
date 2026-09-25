@@ -12,6 +12,7 @@ import {
   Music,
   Pencil,
   FileAudio,
+  Film,
 } from 'lucide-react';
 import {
   formatTime,
@@ -26,9 +27,14 @@ import { GeneratedAudio } from '../types';
 interface AudioPlayerProps {
   audio: GeneratedAudio;
   onUpdateTitle?: (audioId: string, newTitle: string) => void;
+  onSendToVideoEditor?: (audio: GeneratedAudio) => void;
 }
 
-export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audio, onUpdateTitle }) => {
+export const AudioPlayer: React.FC<AudioPlayerProps> = ({
+  audio,
+  onUpdateTitle,
+  onSendToVideoEditor,
+}) => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -323,6 +329,19 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ audio, onUpdateTitle }
 
         {/* Primary Download Actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Send to VideoVozLivre */}
+          {onSendToVideoEditor && (
+            <button
+              type="button"
+              onClick={() => onSendToVideoEditor(audio)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-violet-950/80 hover:bg-violet-900 border border-violet-700/80 rounded-lg transition-colors cursor-pointer"
+              title="Puxar este áudio para o editor de vídeo VideoVozLivre"
+            >
+              <Film className="h-3.5 w-3.5 text-violet-300" />
+              <span>Criar Vídeo</span>
+            </button>
+          )}
+
           {/* Download MP3 */}
           <button
             type="button"

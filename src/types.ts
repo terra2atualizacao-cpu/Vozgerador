@@ -37,3 +37,13 @@ export interface ProsodySettings {
   pitch: string; // e.g. "+0Hz", "+15Hz", "-15Hz"
   volume: string; // e.g. "+0%"
 }
+
+export type VideoAspectRatio = '9:16' | '16:9' | '1:1';
+
+export interface VideoClip {
+  index: number;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  label: string;
+}

@@ -1,9 +1,9 @@
 import React from 'react';
-import { Volume2, Sparkles, History, HelpCircle } from 'lucide-react';
+import { Volume2, Sparkles, History, HelpCircle, Film } from 'lucide-react';
 
 interface HeaderProps {
-  activeTab: 'converter' | 'voices' | 'history' | 'about';
-  setActiveTab: (tab: 'converter' | 'voices' | 'history' | 'about') => void;
+  activeTab: 'converter' | 'videovozlivre' | 'voices' | 'history' | 'about';
+  setActiveTab: (tab: 'converter' | 'videovozlivre' | 'voices' | 'history' | 'about') => void;
   historyCount: number;
 }
 
@@ -24,7 +24,7 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, history
           </button>
         </div>
 
-        {/* Zone 2: 4 clean text navigation links */}
+        {/* Zone 2: Navigation links */}
         <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-neutral-400">
           <button
             onClick={() => setActiveTab('converter')}
@@ -35,6 +35,19 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, history
             }`}
           >
             Conversor
+          </button>
+          <button
+            onClick={() => setActiveTab('videovozlivre')}
+            className={`transition-colors pb-1 flex items-center gap-1.5 ${
+              activeTab === 'videovozlivre'
+                ? 'text-white border-b-2 border-white font-semibold'
+                : 'hover:text-neutral-200'
+            }`}
+          >
+            <span>VideoVozLivre</span>
+            <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.2 bg-violet-950 text-violet-300 border border-violet-800 rounded">
+              Vídeo
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('voices')}
@@ -87,6 +100,13 @@ export const Header: React.FC<HeaderProps> = ({ activeTab, setActiveTab, history
               title="Conversor"
             >
               <Volume2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setActiveTab('videovozlivre')}
+              className={`p-2 rounded-lg text-sm ${activeTab === 'videovozlivre' ? 'bg-neutral-800 text-white' : 'text-neutral-400'}`}
+              title="VideoVozLivre"
+            >
+              <Film className="h-4 w-4" />
             </button>
             <button
               onClick={() => setActiveTab('history')}
