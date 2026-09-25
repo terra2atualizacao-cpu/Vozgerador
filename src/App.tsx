@@ -9,6 +9,7 @@ import { HistoryList } from './components/HistoryList';
 import { AboutSection } from './components/AboutSection';
 import { Voice, GeneratedAudio, GenerationProgress, ProsodySettings } from './types';
 import { estimateDurationSeconds } from './utils/audio';
+import { CURATED_VOICES } from './constants/voices';
 import {
   saveAudioToDB,
   getAllAudiosFromDB,
@@ -21,8 +22,15 @@ const STORAGE_KEY_VOICE = 'vozlivre_selected_voice_v1';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'converter' | 'voices' | 'history' | 'about'>('converter');
-  const [voices, setVoices] = useState<Voice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState<Voice | null>(null);
+  const [voices, setVoices] = useState<Voice[]>(CURATED_VOICES);
+  const [selectedVoice, setSelectedVoice] = useState<Voice | null>(() => {
+    try {
+      const savedVoiceId = localStorage.getItem(STORAGE_KEY_VOICE);
+      return CURATED_VOICES.find((v) => v.id === savedVoiceId) || CURATED_VOICES[0];
+    } catch {
+      return CURATED_VOICES[0];
+    }
+  });
   const [isVoicePickerOpen, setIsVoicePickerOpen] = useState(false);
 
   const [text, setText] = useState<string>('');
@@ -196,10 +204,24 @@ export default function App() {
     };
 
     try {
-      // Step 1: Create background synthesis job via POST
-      const jobRes = await fetch('/api/tts/jobs', {
+      // Smooth progress indicator
+      let curPercent = 10;
+      const progressTimer = setInterval(() => {
+        curPercent = Math.min(94, curPercent + 12);
+        setProgress((p) => ({
+          ...p,
+          percent: curPercent,
+          statusText: `Sintetizando áudio neural com ${activeVoice.name} (${curPercent}%)...`,
+        }));
+      }, 350);
+
+      // Direct POST to /api/tts - works on Vercel Serverless & Express
+      const res = await fetch('/api/tts?stream=true', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'audio/mpeg',
+        },
         body: JSON.stringify({
           text,
           voice: activeVoice.id,
@@ -209,125 +231,102 @@ export default function App() {
         }),
       });
 
-      if (!jobRes.ok) {
-        const errJson = await jobRes.json().catch(() => null);
-        throw new Error(errJson?.error || 'Erro ao inicializar conversão.');
+      clearInterval(progressTimer);
+
+      if (!res.ok) {
+        let errMessage = 'Erro na síntese de áudio.';
+        try {
+          const errJson = await res.json();
+          errMessage = errJson?.error || errMessage;
+        } catch {
+          errMessage = 'Serviço de voz temporariamente ocupado. Tente novamente.';
+        }
+        throw new Error(errMessage);
       }
 
-      const { jobId, totalChunks } = await jobRes.json();
+      // Read audio binary directly
+      let audioBlob: Blob;
+      const cType = res.headers.get('content-type') || '';
+      if (cType.includes('audio/')) {
+        audioBlob = await res.blob();
+      } else {
+        const jsonData = await res.json();
+        if (jsonData.audioUrl) {
+          const fileRes = await fetch(jsonData.audioUrl);
+          audioBlob = await fileRes.blob();
+        } else {
+          throw new Error('Formato de resposta de áudio inválido.');
+        }
+      }
+
+      const audioId = res.headers.get('x-audio-id') || crypto.randomUUID();
+      const localAudioUrl = URL.createObjectURL(audioBlob);
 
       setProgress({
-        active: true,
-        completedChunks: 0,
-        totalChunks,
-        percent: 10,
-        statusText: `Processando ${totalChunks} ${totalChunks === 1 ? 'bloco' : 'blocos de áudio'} em paralelo...`,
+        active: false,
+        completedChunks: 1,
+        totalChunks: 1,
+        percent: 100,
+        statusText: 'Áudio concluído com sucesso!',
       });
+      setIsGenerating(false);
 
-      // Step 2: Connect SSE for real-time progress
-      const sse = new EventSource(`/api/tts/jobs/${jobId}/events`);
-      setEventSourceRef(sse);
+      // Determine user defined title or sensible fallback from text
+      const firstSnippet = text.trim().slice(0, 70).replace(/\n/g, ' ') + (text.length > 70 ? '...' : '');
+      const determinedTitle =
+        audioTitle.trim() ||
+        text.trim().slice(0, 50).replace(/\n/g, ' ') ||
+        `audio-${activeVoice.name.toLowerCase()}`;
+      const estDuration = estimateDurationSeconds(text.length);
 
-      sse.addEventListener('progress', (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          setProgress({
-            active: true,
-            completedChunks: data.completed,
-            totalChunks: data.total,
-            percent: Math.min(98, Math.max(10, data.percent)),
-            statusText: `Sintetizando bloco ${data.completed} de ${data.total} (${data.percent}%)...`,
-          });
-        } catch {}
-      });
+      const newAudio: GeneratedAudio = {
+        id: audioId,
+        title: determinedTitle,
+        voice: activeVoice,
+        textSnippet: firstSnippet,
+        charCount: text.length,
+        durationSeconds: estDuration,
+        createdAt: Date.now(),
+        audioUrl: localAudioUrl,
+        downloadUrl: localAudioUrl,
+        blobUrl: localAudioUrl,
+        blob: audioBlob,
+        sizeBytes: audioBlob.size,
+      };
 
-      sse.addEventListener('done', async (e: MessageEvent) => {
-        try {
-          const data = JSON.parse(e.data);
-          sse.close();
-          setEventSourceRef(null);
-          setIsGenerating(false);
-          setProgress({
-            active: false,
-            completedChunks: totalChunks,
-            totalChunks,
-            percent: 100,
-            statusText: 'Áudio concluído com sucesso!',
-          });
+      setCurrentAudio(newAudio);
 
-          // Fetch the generated audio binary as Blob for permanent local storage & offline access
-          let audioBlob: Blob | undefined;
-          let localAudioUrl = data.audioUrl;
-          try {
-            const res = await fetch(data.audioUrl);
-            if (res.ok) {
-              audioBlob = await res.blob();
-              localAudioUrl = URL.createObjectURL(audioBlob);
-            }
-          } catch (fetchErr) {
-            console.warn('Could not fetch blob immediately:', fetchErr);
-          }
+      // Persist to IndexedDB permanently
+      try {
+        await saveAudioToDB({
+          id: audioId,
+          title: determinedTitle,
+          voice: activeVoice,
+          textSnippet: firstSnippet,
+          charCount: text.length,
+          durationSeconds: estDuration,
+          createdAt: Date.now(),
+          sizeBytes: audioBlob.size,
+          audioBlob,
+        });
+      } catch (dbErr) {
+        console.error('Failed to save audio to IndexedDB:', dbErr);
+      }
 
-          // Determine user defined title or sensible fallback from text
-          const firstSnippet = text.trim().slice(0, 70).replace(/\n/g, ' ') + (text.length > 70 ? '...' : '');
-          const determinedTitle =
-            audioTitle.trim() ||
-            text.trim().slice(0, 50).replace(/\n/g, ' ') ||
-            `audio-${activeVoice.name.toLowerCase()}`;
-          const estDuration = estimateDurationSeconds(text.length);
-
-          const newAudio: GeneratedAudio = {
-            id: data.id,
-            title: determinedTitle,
-            voice: activeVoice,
-            textSnippet: firstSnippet,
-            charCount: text.length,
-            durationSeconds: estDuration,
-            createdAt: Date.now(),
-            audioUrl: localAudioUrl,
-            downloadUrl: localAudioUrl,
-            blobUrl: localAudioUrl,
-            blob: audioBlob,
-            sizeBytes: data.sizeBytes || audioBlob?.size,
-          };
-
-          setCurrentAudio(newAudio);
-
-          // Persist to IndexedDB permanently
-          if (audioBlob) {
-            try {
-              await saveAudioToDB({
-                id: data.id,
-                title: determinedTitle,
-                voice: activeVoice,
-                textSnippet: firstSnippet,
-                charCount: text.length,
-                durationSeconds: estDuration,
-                createdAt: Date.now(),
-                sizeBytes: audioBlob.size,
-                audioBlob,
-              });
-            } catch (dbErr) {
-              console.error('Failed to save audio to IndexedDB:', dbErr);
-            }
-          }
-
-          setHistory((prev) => [newAudio, ...prev.filter((i) => i.id !== newAudio.id)]);
-        } catch (err) {
-          console.error('Error processing done event:', err);
-        }
-      });
-
-      sse.addEventListener('error', (e: any) => {
-        sse.close();
-        setEventSourceRef(null);
-        setIsGenerating(false);
-        setError('Ocorreu uma instabilidade na geração de áudio. Tente novamente.');
-      });
+      setHistory((prev) => [newAudio, ...prev.filter((i) => i.id !== audioId)]);
     } catch (err: any) {
       console.error('TTS error:', err);
       setIsGenerating(false);
-      setError(err?.message || 'Falha na conexão com o serviço de voz. Verifique sua conexão e tente novamente.');
+      setProgress({
+        active: false,
+        completedChunks: 0,
+        totalChunks: 0,
+        percent: 0,
+        statusText: '',
+      });
+      setError(
+        err?.message || 'Falha na conexão com o serviço de voz. Verifique sua conexão e tente novamente.'
+      );
     }
   };
 

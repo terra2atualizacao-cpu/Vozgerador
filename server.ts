@@ -394,6 +394,15 @@ app.post('/api/tts', async (req: Request, res: Response) => {
       console.error('Failed to write audio to disk:', e);
     }
 
+    // If client requested direct binary audio stream
+    if (req.headers.accept?.includes('audio/mpeg') || req.query.stream === 'true') {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', audioBuffer.length);
+      res.setHeader('X-Audio-Id', audioId);
+      res.send(audioBuffer);
+      return;
+    }
+
     res.json({
       status: 'ok',
       id: audioId,
